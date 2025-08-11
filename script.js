@@ -1,39 +1,60 @@
-const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-recognition.lang = 'en-US';
-recognition.interimResults = false;
-document.getElementById("start-btn").addEventListener("click", () => {
-    recognition.start();
-});
-recognition.onresult = async (event) => {
-    let userText = event.results[0][0].transcript;
-    document.getElementById("user-text").textContent = userText;
-
-    speak("You said: " + userText);
-    let aiResponse = await getAIResponse(userText);
-
-    document.getElementById("ai-text").textContent = aiResponse;
-    speak(aiResponse);
-};
-async function getAIResponse(prompt) {
-    try {
-        let response = await fetch("https://YOUR-BACKEND-URL/api/ask", {  // change this to your Render/Vercel backend link
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt })
-        });
-
-        let data = await response.json();
-        return data.reply;
-    } catch (error) {
-        console.error("Error:", error);
-        return "Sorry, I couldn’t reach the AI service.";
-    }
+const BACKEND_URL = "https://voice-ai-backend-m1y1.onrender.com";
+let recognition;
+if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+} else if ('SpeechRecognition' in window) {
+    recognition = new SpeechRecognition();
+} else {
+    alert("Your browser doesn't support speech recognition.");
+}
+if (recognition) {
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
 }
 function speak(text) {
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'en-US';
-    speechSynthesis.speak(utter);
+    const synth = window.speechSynthesis;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    synth.speak(utterance);
 }
-recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-};
+async function sendToAI(message) {
+    try {
+        const res = await fetch(`${BACKEND_URL}/chat`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+
+        if (data && data.reply) {
+            document.getElementById("response").innerText = data.reply;
+            speak(data.reply);
+        } else {
+            document.getElementById("response").innerText = "No reply from AI.";
+        }
+    } catch (err) {
+        console.error(err);
+        document.getElementById("response").innerText = "Error contacting AI.";
+    }
+}
+function startListening() {
+    if (!recognition) return;
+    recognition.start();
+    document.getElementById("status").innerText = "Listening... 🎤";
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("userText").innerText = transcript;
+        sendToAI(transcript);
+    };
+    recognition.onerror = (err) => {
+        console.error(err);
+        document.getElementById("status").innerText = "Error listening.";
+    };
+    recognition.onend = () => {
+        document.getElementById("status").innerText = "Click to speak again.";
+    };
+}
+document.getElementById("startBtn").addEventListener("click", startListening);
